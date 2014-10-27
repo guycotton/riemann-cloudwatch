@@ -1,0 +1,69 @@
+#!/usr/bin/env ruby
+
+require File.expand_path('../../lib/riemann_cloud_watch/cloud_watch_tool', __FILE__)
+
+$0 = __FILE__
+
+class Riemann::Tools::RDSMetrics
+  include Riemann::CloudWatchTool
+
+  opt :cluster_ids, "cache cluster id to query", :type => :strings, :required => true
+  
+  aws_namespace 'AWS/Elasticache'
+
+  # RDS metric types, from:
+  # http://docs.aws.amazon.com/AmazonCloudWatch/latest/DeveloperGuide/rds-metricscollected.html
+  metrics "CPUUtilization" => {
+            "Unit" => "Percent",
+            "Statistics" => ["Average" ]
+          },
+          "SwapUsage" => {
+            "Unit" => "Bytes",
+            "Statistics" => ["Average" ]
+          },
+          "FreeableMemory" => {
+            "Unit" => "Bytes",
+            "Statistics" => ["Average" ]
+          },
+          "NetworkBytesIn" => {
+            "Unit" => "Bytes",
+            "Statistics" => ["Average" ]
+          },
+          "NetworkBytesOut" => {
+            "Unit" => "Bytes",
+            "Statistics" => ["Average" ]
+          }
+
+    
+  def elasticache_connection
+    @elasticache_connection ||= Fog::AWS::Elasticache.new connection_params
+  end
+  
+  def tick
+    next_time_block
+    options[:cluster_ids].each do |cluster_id|
+      response = elasticache_connection.describe_cache_clusters(cluster_id, show_node_info: true)
+      # should only run once
+      response.body['CacheClusters'].each do |cluster|
+        cache_nodes = cluster['CacheNodes'] || []
+        cache_nodes.each do |cache_node|
+          send_metrics :dimensions => {'CacheClusterId' => cluster_id, 'CacheNodeId' => cache_node['CacheNodeId']}
+        end
+      end
+    end
+  end
+  
+  generates_riemann_event do |metric|   
+    {
+        host: "#{options[:aws_region]}.#{metric.dimensions['DBInstanceIdentifier']}",
+        service: "rds.#{metric.name}.#{metric.stat_type}",
+        ttl: options[:interval],
+        description: "#{metric.name} #{metric.stat_type} (#{metric.unit})",
+        time: metric.timestamp,
+        metric: metric.value
+    }
+  end
+
+end
+
+Riemann::Tools::RDSMetrics.run

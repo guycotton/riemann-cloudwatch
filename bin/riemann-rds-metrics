@@ -1,0 +1,102 @@
+#!/usr/bin/env ruby
+
+require File.expand_path('../../lib/riemann_cloud_watch/cloud_watch_tool', __FILE__)
+
+$0 = __FILE__
+
+class Riemann::Tools::RDSMetrics
+  include Riemann::CloudWatchTool
+
+  opt :db_instance_ids, "RDS DBs to query", :type => :strings, :required => true
+  
+  aws_namespace 'AWS/RDS'
+
+  # RDS metric types, from:
+  # http://docs.aws.amazon.com/AmazonCloudWatch/latest/DeveloperGuide/rds-metricscollected.html
+  metrics "BinLogDiskUsage" => {
+            "Unit" => "Bytes",
+            "Statistics" => ["Maximum", "Minimum", "Average" ]
+          },
+          "CPUUtilization" => {
+            "Unit" => "Percent",
+            "Statistics" => ["Maximum", "Minimum", "Average" ]
+          },
+          "DatabaseConnections" => {
+            "Unit" => "Count",
+            "Statistics" => ["Average"]
+          },
+          "DiskQueueDepth" => {
+            "Unit" => "Count",
+            "Statistics" => ["Average"]
+          },
+          "FreeableMemory" => {
+            "Unit" => "Bytes",
+            "Statistics" => ["Maximum", "Minimum", "Average"]
+          },
+          "FreeStorageSpace" => {
+            "Unit" => "Bytes",
+            "Statistics" => ["Maximum", "Minimum", "Average"]
+          },
+          "ReplicaLag" => {
+            "Unit" => "Seconds",
+            "Statistics" => ["Maximum", "Minimum", "Average"]
+          },
+          "SwapUsage" => {
+            "Unit" => "Bytes",
+            "Statistics" => ["Maximum", "Minimum", "Average"]
+          },
+          "ReadIOPS" => {
+            "Unit" => "Count/Second",
+            "Statistics" => ["Average"]
+          },
+          "WriteIOPS" => {
+            "Unit" => "Count/Second",
+            "Statistics" => ["Average"]
+          },
+          "ReadLatency" => {
+            "Unit" => "Seconds",
+            "Statistics" => ["Average"]
+          },
+          "WriteLatency" => {
+            "Unit" => "Seconds",
+            "Statistics" => ["Average"]
+          },
+          "ReadThroughput" => {
+            "Unit" => "Bytes/Second",
+            "Statistics" => ["Average"]
+          },
+          "WriteThroughput" => {
+            "Unit" => "Bytes/Second",
+            "Statistics" => ["Average"]
+          },
+          "NetworkReceiveThroughput" => {
+            "Unit" => "Bytes",
+            "Statistics" => ["Average"]
+          },
+          "NetworkTransmitThroughput" => {
+            "Unit" => "Bytes",
+            "Statistics" => ["Average"]
+          }      
+
+  generates_riemann_event do |metric|   
+    {
+        host: "#{options[:aws_region]}.#{metric.dimensions['DBInstanceIdentifier']}",
+        service: "rds.#{metric.name}.#{metric.stat_type}",
+        ttl: options[:interval],
+        description: "#{metric.name} #{metric.stat_type} (#{metric.unit})",
+        time: metric.timestamp,
+        metric: metric.value
+    }
+  end
+  
+  def tick  
+    next_time_block
+    options[:db_instance_ids].each do |db_instance_id|
+      send_metrics :dimensions => { "DBInstanceIdentifier" => db_instance_id }        
+    end
+  end
+  
+
+end
+
+Riemann::Tools::RDSMetrics.run

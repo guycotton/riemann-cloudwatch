@@ -1,0 +1,85 @@
+#!/usr/bin/env ruby
+
+require File.expand_path('../../lib/riemann_cloud_watch/cloud_watch_tool', __FILE__)
+
+$0 = __FILE__
+
+class Riemann::Tools::RDSMetrics
+  include Riemann::CloudWatchTool
+
+  opt :aws_azs, "List of AZs to aggregate against", :type => :strings, :default => [ "all_az" ]
+  opt :elbs, "List of ELBs to pull metrics from", :type => :strings, :required => true
+  
+  aws_namespace 'AWS/ELB'
+
+  # ELB metric types, from:
+  # http://docs.aws.amazon.com/AmazonCloudWatch/latest/DeveloperGuide/CW_Support_For_AWS.html#elb-metricscollected
+  metrics "Latency" => {
+          "Unit" => "Seconds",
+          "Statistics" => ["Maximum", "Minimum", "Average" ]
+        },
+        "RequestCount" => {
+          "Unit" => "Count",
+          "Statistics" => [ "Sum" ]
+        },
+        "HealthyHostCount" => {
+          "Units" => "Count",
+          "Statistics" => [ "Minimum", "Maximum", "Average" ]
+        },
+        "UnHealthyHostCount" => {
+          "Units" => "Count",
+          "Statistics" => [ "Minimum", "Maximum", "Average" ]
+        },
+        "HTTPCode_ELB_4XX" => {
+          "Units" => "Count",
+          "Statistics" => [ "Sum" ]
+        },
+        "HTTPCode_ELB_5XX" => {
+          "Units" => "Count",
+          "Statistics" => [ "Sum" ]
+        },
+        "HTTPCode_Backend_2XX" => {
+          "Units" => "Count",
+          "Statistics" => [ "Sum" ]
+        },
+        "HTTPCode_Backend_3XX" => {
+          "Units" => "Count",
+          "Statistics" => [ "Sum" ]
+        },
+        "HTTPCode_Backend_4XX" => {
+          "Units" => "Count",
+          "Statistics" => [ "Sum" ]
+        },
+        "HTTPCode_Backend_5XX" => {
+          "Units" => "Count",
+          "Statistics" => [ "Sum" ]
+        }      
+
+  generates_riemann_event do |metric|   
+    {
+        host: metric.opts[:lb],
+        service: "elb.#{metric.opts[:az]}.#{metric.name}.#{metric.stat_type}",
+        ttl: 60,
+        description: "#{metric.opts[:lb]} #{metric.name} #{metric.stat_type} (#{metric.unit})",
+        tags: [ "production", "elb_metrics" ],
+        time: metric.timestamp,
+        metric: metric.value
+    }
+  end
+  
+  def tick  
+    next_time_block
+    options[:elbs].each do |lb|
+      options[:aws_azs].each do |az|
+        dimensions = { "LoadBalancerName"=> lb } 
+        unless az == "all_az"
+          dimensions["AvailabilityZone"] = az 
+        end
+        send_metrics :dimensions => dimensions, :opts => { :lb => lb, :az => az } 
+      end
+    end
+  end
+
+end
+
+Riemann::Tools::RDSMetrics.run
