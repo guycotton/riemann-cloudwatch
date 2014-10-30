@@ -59,7 +59,6 @@ class Riemann::Tools::RDSMetrics
     {
         host: metric.opts[:lb],
         service: "elb.#{metric.opts[:az]}.#{metric.name}.#{metric.stat_type}",
-        ttl: 60,
         description: "#{metric.opts[:lb]} #{metric.name} #{metric.stat_type} (#{metric.unit})",
         tags: [ "production", "elb_metrics" ],
         time: metric.timestamp,

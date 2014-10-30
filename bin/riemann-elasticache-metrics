@@ -57,7 +57,6 @@ class Riemann::Tools::RDSMetrics
     {
         host: "#{options[:aws_region]}.#{metric.dimensions['DBInstanceIdentifier']}",
         service: "rds.#{metric.name}.#{metric.stat_type}",
-        ttl: options[:interval],
         description: "#{metric.name} #{metric.stat_type} (#{metric.unit})",
         time: metric.timestamp,
         metric: metric.value
